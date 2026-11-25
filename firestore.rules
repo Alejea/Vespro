@@ -1,0 +1,249 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidDiaryEntry(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.dateKey is string && data.dateKey.size() >= 1 && data.dateKey.size() <= 20 &&
+             data.title is string && data.title.size() <= 120 &&
+             data.rawTranscript is string && data.rawTranscript.size() >= 1 && data.rawTranscript.size() <= 15000 &&
+             data.reorganizedText is string && data.reorganizedText.size() <= 15000 &&
+             data.mainTheme is string && data.mainTheme.size() <= 80 &&
+             data.themes is list && data.themes.size() <= 8 && (data.themes.size() == 0 || data.themes[0] is string) &&
+             data.sentimentLabel is string && data.sentimentLabel.size() <= 60 &&
+             data.sentimentValence is int && data.sentimentValence >= 1 && data.sentimentValence <= 5 &&
+             data.mentalClarity is int && data.mentalClarity >= 1 && data.mentalClarity <= 5 &&
+             data.reflectionQuestion is string && data.reflectionQuestion.size() <= 600 &&
+             data.reflectionAnswer is string && data.reflectionAnswer.size() <= 5000 &&
+             data.takeaway is string && data.takeaway.size() <= 400 &&
+             data.usedVoice is bool;
+    }
+
+    function isValidWeeklySummary(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.periodLabel is string && data.periodLabel.size() >= 1 && data.periodLabel.size() <= 80 &&
+             data.headline is string && data.headline.size() >= 1 && data.headline.size() <= 150 &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 6000 &&
+             data.recurringSentiments is list && data.recurringSentiments.size() <= 8 && (data.recurringSentiments.size() == 0 || data.recurringSentiments[0] is string) &&
+             data.recurringThemes is list && data.recurringThemes.size() <= 8 && (data.recurringThemes.size() == 0 || data.recurringThemes[0] is string) &&
+             data.recurringPatterns is string && data.recurringPatterns.size() <= 3000 &&
+             data.weeklyQuestion is string && data.weeklyQuestion.size() <= 600 &&
+             data.entryCount is int && data.entryCount >= 0 && data.entryCount <= 500 &&
+             data.averageValence is number && data.averageValence >= 0.0 && data.averageValence <= 5.0;
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.preferredName is string && data.preferredName.size() <= 60 &&
+             data.ageRange is string && data.ageRange.size() <= 30 &&
+             data.lifestyleTags is list && data.lifestyleTags.size() <= 8 && (data.lifestyleTags.size() == 0 || data.lifestyleTags[0] is string) &&
+             data.lifestyleNotes is string && data.lifestyleNotes.size() <= 1500 &&
+             data.keyRelationships is list && data.keyRelationships.size() <= 8 && (data.keyRelationships.size() == 0 || data.keyRelationships[0] is string) &&
+             data.relationshipsNote is string && data.relationshipsNote.size() <= 1500 &&
+             data.mainConcerns is list && data.mainConcerns.size() <= 8 && (data.mainConcerns.size() == 0 || data.mainConcerns[0] is string) &&
+             data.concernsNote is string && data.concernsNote.size() <= 1500 &&
+             data.reflectionStyle is string && data.reflectionStyle.size() <= 80 &&
+             data.onboardingCompleted is bool &&
+             data.onboardingSkipped is bool;
+    }
+
+    function isValidSavedAphorism(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.entryId is string && data.entryId.size() <= 128 &&
+             data.quoteText is string && data.quoteText.size() >= 1 && data.quoteText.size() <= 1000 &&
+             data.attribution is string && data.attribution.size() <= 120 &&
+             data.momentLabel is string && data.momentLabel.size() <= 40 &&
+             data.themeTag is string && data.themeTag.size() <= 80;
+    }
+
+    match /users/{userId}/entries/{entryId} {
+      allow get: if isOwner(userId) && isValidId(entryId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(entryId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'dateKey', 'title', 'rawTranscript', 'reorganizedText',
+                         'mainTheme', 'themes', 'sentimentLabel', 'sentimentValence',
+                         'mentalClarity', 'reflectionQuestion', 'reflectionAnswer',
+                         'takeaway', 'usedVoice', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'dateKey', 'title', 'rawTranscript', 'reorganizedText',
+                         'mainTheme', 'themes', 'sentimentLabel', 'sentimentValence',
+                         'mentalClarity', 'reflectionQuestion', 'reflectionAnswer',
+                         'takeaway', 'usedVoice', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidDiaryEntry(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(entryId) &&
+                       isValidDiaryEntry(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'dateKey', 'title', 'rawTranscript', 'reorganizedText',
+                         'mainTheme', 'themes', 'sentimentLabel', 'sentimentValence',
+                         'mentalClarity', 'reflectionQuestion', 'reflectionAnswer',
+                         'takeaway', 'usedVoice', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(entryId);
+    }
+
+    match /users/{userId}/weeklySummaries/{summaryId} {
+      allow get: if isOwner(userId) && isValidId(summaryId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(summaryId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'periodLabel', 'headline', 'summary',
+                         'recurringSentiments', 'recurringThemes', 'recurringPatterns',
+                         'weeklyQuestion', 'entryCount', 'averageValence',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'periodLabel', 'headline', 'summary',
+                         'recurringSentiments', 'recurringThemes', 'recurringPatterns',
+                         'weeklyQuestion', 'entryCount', 'averageValence',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidWeeklySummary(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(summaryId) &&
+                       isValidWeeklySummary(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'periodLabel', 'headline', 'summary',
+                         'recurringSentiments', 'recurringThemes', 'recurringPatterns',
+                         'weeklyQuestion', 'entryCount', 'averageValence',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(summaryId);
+    }
+
+    match /users/{userId}/profile/{profileId} {
+      allow get: if isOwner(userId) && isValidId(profileId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'preferredName', 'ageRange', 'lifestyleTags',
+                         'lifestyleNotes', 'keyRelationships', 'relationshipsNote',
+                         'mainConcerns', 'concernsNote', 'reflectionStyle',
+                         'onboardingCompleted', 'onboardingSkipped',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'preferredName', 'ageRange', 'lifestyleTags',
+                         'lifestyleNotes', 'keyRelationships', 'relationshipsNote',
+                         'mainConcerns', 'concernsNote', 'reflectionStyle',
+                         'onboardingCompleted', 'onboardingSkipped',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'preferredName', 'ageRange', 'lifestyleTags',
+                         'lifestyleNotes', 'keyRelationships', 'relationshipsNote',
+                         'mainConcerns', 'concernsNote', 'reflectionStyle',
+                         'onboardingCompleted', 'onboardingSkipped',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(profileId);
+    }
+
+    match /users/{userId}/aphorisms/{aphorismId} {
+      allow get: if isOwner(userId) && isValidId(aphorismId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(aphorismId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'entryId', 'quoteText', 'attribution',
+                         'momentLabel', 'themeTag', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'entryId', 'quoteText', 'attribution',
+                         'momentLabel', 'themeTag', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       isValidSavedAphorism(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(aphorismId) &&
+                       isValidSavedAphorism(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'entryId', 'quoteText', 'attribution',
+                         'momentLabel', 'themeTag', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(aphorismId);
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Vespro",
+  "description": "Diario segreto di fine giornata con flusso di coscienza vocale, riorganizzazione e analisi ricorrente senza giudizio, domande di riflessione e blocco con PIN o sequenza.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

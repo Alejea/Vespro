@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<resources>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-vespro-fb14bf10-2251-4505-a63c-26d842c2638a</string>
+    <string name="recaptcha_site_key" translatable="false">6Le5SDIuAAAAADmFcO_WqjSUcChYRaefVCNMLWyH</string>
+</resources>
